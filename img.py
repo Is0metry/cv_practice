@@ -18,13 +18,13 @@ class Img:
     @classmethod
     def list(cls) -> List[str]:
         return [p.split('.')[0] for p in os.listdir(cls.path)]
-    
+
     @classmethod
     def load(cls, img: Union[str, int] = 0) -> Self:
         if isinstance(img, int):
             img = cls.list()[img]
         arr = cv.imread(cls.path + img + '.png')
-        return cls(cls.path,arr)
+        return cls(cls.path, arr)
 
     def show(self) -> Image:
         new_img = cv.cvtColor(self.img(), cv.COLOR_BGR2RGB)
@@ -38,14 +38,17 @@ class Img:
         img_y = round(self.scale * self.arr.shape[0])
         return cv.resize(image, (img_x, img_y), interpolation=cv.INTER_LINEAR)
 
-
     def draw(self, detected: np.ndarray) -> Self:
         image = deepcopy(self.arr)
         for x, y, w, h in detected:
-            image = cv.rectangle(image, (x, y), (x+w, y+h),(255,0,0),5)
-        return Img(self.path,image,self.scale)
-    
-    def img_bw(self)->np.ndarray:
+            image = cv.rectangle(image, (x, y), (x+w, y+h), (255, 0, 0), 5)
+        return Img(self.path, image, self.scale)
+
+    def img_bw(self) -> np.ndarray:
         new_arr = deepcopy(self.arr)
         return cv.cvtColor(new_arr, cv.COLOR_BGR2GRAY)
-        
+
+    def blur(self, kx: int, ky: int) -> Self:
+        new_arr = deepcopy(self.arr)
+        new_arr = cv.blur(new_arr, (kx, ky), cv.BORDER_DEFAULT)
+        return Img(self.path, new_arr, self.scale)

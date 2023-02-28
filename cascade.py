@@ -41,4 +41,5 @@ class Cascade:
         detected = self.cascade.detectMultiScale(img.img_bw(), scaleFactor=scale_factor,
                                                  minNeighbors=min_neighbors,
                                                  minSize=min_size)
+        print(f'detected {len(detected)} faces')
         return img.draw(detected)
