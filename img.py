@@ -25,7 +25,13 @@ class Img:
             img = cls.list()[img]
         arr = cv.imread(cls.path + img + '.png')
         return cls(cls.path, arr)
-
+    
+    @classmethod
+    def from_pil(cls,img:Image)-> Self:
+        new_arr = np.asarray(img)
+        new_arr = cv.cvtColor(new_arr,cv.COLOR_BGR2RGB)
+        return cls(arr=new_arr)
+    
     def show(self,scale:Union[float,None]=None) -> Image:
         if scale is not None:
             self.scale = scale
