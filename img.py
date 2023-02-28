@@ -26,7 +26,9 @@ class Img:
         arr = cv.imread(cls.path + img + '.png')
         return cls(cls.path, arr)
 
-    def show(self) -> Image:
+    def show(self,scale:Union[float,None]=None) -> Image:
+        if scale is not None:
+            self.scale = scale
         new_img = cv.cvtColor(self.img(), cv.COLOR_BGR2RGB)
         return Image.fromarray(new_img)
 
@@ -38,7 +40,7 @@ class Img:
         img_y = round(self.scale * self.arr.shape[0])
         return cv.resize(image, (img_x, img_y), interpolation=cv.INTER_LINEAR)
 
-    def draw(self, detected: np.ndarray) -> Self:
+    def draw_squares(self, detected: np.ndarray) -> Self:
         image = deepcopy(self.arr)
         for x, y, w, h in detected:
             image = cv.rectangle(image, (x, y), (x+w, y+h), (255, 0, 0), 5)
@@ -46,9 +48,22 @@ class Img:
 
     def img_bw(self) -> np.ndarray:
         new_arr = deepcopy(self.arr)
-        return cv.cvtColor(new_arr, cv.COLOR_BGR2GRAY)
+        return cv.cvtColor(new_arr,cv.COLOR_BGR2GRAY)
 
-    def blur(self, kx: int, ky: int) -> Self:
+    def blur(self, kx: int=50, ky: int=50) -> Self:
         new_arr = deepcopy(self.arr)
         new_arr = cv.blur(new_arr, (kx, ky), cv.BORDER_DEFAULT)
         return Img(self.path, new_arr, self.scale)
+    
+    def blur_faces(self,faces:np.ndarray):
+        blurred_arr = self.blur(300,300).arr
+        arr = deepcopy(self.arr)
+        mask = np.zeros((arr.shape[0], arr.shape[1],arr.shape[2]),dtype=np.uint8)
+        for x, y, w,h, in faces:
+            r = (w+h)//4
+            mask = cv.circle(mask,(x+r,y+r),r, (255,255,255),cv.FILLED)
+        arr = np.where(mask > 0,blurred_arr,arr)
+        return Img(self.path, arr, self.scale)
+        
+            
+        

@@ -42,4 +42,4 @@ class Cascade:
                                                  minNeighbors=min_neighbors,
                                                  minSize=min_size)
         print(f'detected {len(detected)} faces')
-        return img.draw(detected)
+        return img.blur_faces(detected)
