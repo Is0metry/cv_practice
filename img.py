@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from typing import List, Self, Union
 from copy import deepcopy
 import cv2 as cv
+import re
 import numpy as np
 from PIL import Image
 
@@ -11,16 +12,53 @@ IMG_PATH = 'images/'
 
 @dataclass
 class Img:
+    #path to folder with images
     path: str = IMG_PATH
+    #currently loaded image stored as a numpy array
     arr: np.ndarray = field(default_factory=np.ndarray([]))
+    #scale at which to display the image
     scale: float = .5
 
     @classmethod
     def list(cls) -> List[str]:
+        '''
+        Lists all available images in `path`
+        ## Parameters
+        None
+        ## Returns
+        a list of all available images in `path`
+        ## Usage
+        ```
+        from img import Img
+        Img.list()
+        >>  [img_name_1, img_name_2,...] 
+        ```
+        '''
         return [p.split('.')[0] for p in os.listdir(cls.path)]
 
     @classmethod
     def load(cls, img: Union[str, int] = 0) -> Self:
+        '''
+        Loads an image from `self.path`
+        ## Parameters:
+        img: Either a string representing the filename,
+        or an integer representing which file to access
+        from `Img.list()`
+        ## Returns:
+        an `Img` object with the image loaded.
+        ## Usage:
+        ```
+        #import class
+        from img import Img
+        
+        #list images available
+        Img.list()
+        >> ['img_name_1', 'img_name_2',...]
+        img_1 = Img.load('img_name_1')
+        img_custom = Img('/path/to/images/').load('custom')
+        img_2 = Img.load(1)
+        ```
+        '''
         if isinstance(img, int):
             img = cls.list()[img]
         arr = cv.imread(cls.path + img + '.png')
@@ -28,44 +66,99 @@ class Img:
     
     @classmethod
     def from_pil(cls,img:Image)-> Self:
+        '''
+        Creates a new `Img` from `PIL.Image` file
+        ## Parameters:
+        img: `PIL.Image` object
+        ## Returns:
+        new `Img` from img
+        '''
         new_arr = np.asarray(img)
         new_arr = cv.cvtColor(new_arr,cv.COLOR_BGR2RGB)
         return cls(arr=new_arr)
     
-    def show(self,scale:Union[float,None]=None) -> Image:
+    def show(self,scale:Union[float,None]=None) -> Image.Image:
+        '''
+        creates `PIL.Image` from object i.e. to display
+        in Jupyter notebook
+        ## Parameters:
+        scale: an optional value to set `self.scale` to
+        ## Returns:
+        a `PIL.Image` object
+        '''
         if scale is not None:
             self.scale = scale
         new_img = cv.cvtColor(self.img(), cv.COLOR_BGR2RGB)
         return Image.fromarray(new_img)
 
-    def img(self, scale: Union[float, None] = None) -> np.ndarray:
-        if scale is not None:
-            self.scale = scale
+    def img(self) -> np.ndarray:
+        '''
+        gets the scaled image represented by object
+        ## Parameters:
+        None
+        ## Returns:
+        a `ndarray` of the image scaled by `scale`
+        '''
         image = deepcopy(self.arr)
         img_x = round(self.scale * self.arr.shape[1])
         img_y = round(self.scale * self.arr.shape[0])
         return cv.resize(image, (img_x, img_y), interpolation=cv.INTER_LINEAR)
 
     def draw_squares(self, detected: np.ndarray) -> Self:
+        '''
+        Draws squares around any detected objects from Haar Cascade
+        ## Parameters:
+        detected: `ndarray` containing x and y coordinates and
+        width and height of the detected objects.
+        ## Returns:
+        new `Img` object with squares drawn on detected objects       
+        '''
         image = deepcopy(self.arr)
         for x, y, w, h in detected:
             image = cv.rectangle(image, (x, y), (x+w, y+h), (255, 0, 0), 5)
         return Img(self.path, image, self.scale)
 
     def img_bw(self) -> np.ndarray:
+        '''
+        generates a grayscale version of `self.arr` used for
+        Haar cascade detection
+        ## Parameters:
+        None
+        ## Returns:
+        `self.arr` converted to a grayscale image
+        '''
         new_arr = deepcopy(self.arr)
         return cv.cvtColor(new_arr,cv.COLOR_BGR2GRAY)
 
     def blur(self, kx: int=50, ky: int=50) -> Self:
+        '''
+        Blurs the image
+        ## Parameters:
+        kx, ky: integers representing the x and y 
+        blur passed to `cv.blur`
+        ## Returns:
+        a new `Img` object with the image blurred
+        '''
         new_arr = deepcopy(self.arr)
         new_arr = cv.blur(new_arr, (kx, ky), cv.BORDER_DEFAULT)
         return Img(self.path, new_arr, self.scale)
     
-    def blur_faces(self,faces:np.ndarray):
-        blurred_arr = self.blur(300,300).arr
+    def blur_detected(self,detected:np.ndarray):
+        '''
+        Similar to `draw_squares` but instead blurs a circle
+        on the detected objects
+        ## Parameters:
+        detected: `ndarray` containing x and y coordinates and
+        width and height of the detected objects generated by
+        `Cascade`'s `detect` function
+        ## Returns:
+        a new `Img` object containing the blurred detected
+        objects
+        '''
+        blurred_arr = self.blur(301,301).arr
         arr = deepcopy(self.arr)
         mask = np.zeros((arr.shape[0], arr.shape[1],arr.shape[2]),dtype=np.uint8)
-        for x, y, w,h, in faces:
+        for x, y, w,h, in detected:
             r = (w+h)//4
             mask = cv.circle(mask,(x+r,y+r),r, (255,255,255),cv.FILLED)
         arr = np.where(mask > 0,blurred_arr,arr)
