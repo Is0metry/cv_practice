@@ -2,6 +2,7 @@ import os
 from dataclasses import dataclass
 from typing import List, Self, Tuple, Union
 from img import Img
+import cv2 as cv
 from cv2 import CascadeClassifier
 import numpy as np
 
@@ -67,5 +68,18 @@ class Cascade:
         detected = self.cascade.detectMultiScale(img.img_bw(), scaleFactor=scale_factor,
                                                  minNeighbors=min_neighbors,
                                                  minSize=min_size)
-        print(f'detected {len(detected)} faces')
         return img.blur_detected(detected)
+
+if __name__ == '__main__':
+    cascade = Cascade.load('frontalface_default')
+    capture = cv.VideoCapture(0)
+    while capture.isOpened():
+        ret, frame = capture.read()
+        if ret:
+            img = Img(arr=frame)
+            img = cascade.detect(img,min_size=(400,400),min_neighbors=4)
+            cv.imshow('Frame',img.img())
+            if cv.waitKey(25) & 0xFF == ord('q'):
+                break
+    capture.release()
+    cv.destroyAllWindows()
