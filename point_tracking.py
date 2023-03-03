@@ -1,99 +1,45 @@
 import numpy as np
 import cv2 as cv
 from dataclasses import dataclass
-from typing import Self, Union
+from typing import Self, Tuple, Union, Dict
 from ipywidgets.widgets import Video
-fourcc = cv.VideoWriter_fourcc(*'h264')
-cap = cv.VideoCapture('movies/dvd.mov')
-fps = cap.get(cv.CAP_PROP_FPS)
-width = cap.get(cv.CAP_PROP_FRAME_WIDTH)
-height = cap.get(cv.CAP_PROP_FRAME_HEIGHT)
-writer = cv.VideoWriter(
-    'movies/dvd_tracked.mp4',
-    fourcc,
-    fps,
-    (int(width), int(height))
 
-)
-flag = writer.isOpened()
-if not flag:
-    print('writer not open')
-# params for ShiTomasi corner detection
-feature_params = dict(maxCorners=100,
+FEATURE_PARAMS = dict(maxCorners=100,
                       qualityLevel=0.3,
                       minDistance=7,
                       blockSize=7)
 
-# Parameters for lucas kanade optical flow
-lk_params = dict(winSize=(15, 15),
+LK_PARAMS = dict(winSize=(15, 15),
                  maxLevel=2,
                  criteria=(cv.TERM_CRITERIA_EPS | cv.TERM_CRITERIA_COUNT, 10, 0.03))
-
-# Create some random colors
-color = np.random.randint(0, 255, (100, 3))
-
-# Take first frame and find corners in it
-ret, old_frame = cap.read()
-if not ret:
-    print("no frame read!")
-old_gray = cv.cvtColor(old_frame, cv.COLOR_BGR2GRAY)
-p0 = cv.goodFeaturesToTrack(old_gray, mask=None, **feature_params)
-# Create a mask image for drawing purposes
-mask = np.zeros_like(old_frame)
-
-while (flag):
-    ret, frame = cap.read()
-    if not ret:
-        print('No frames grabbed!')
-        break
-
-    frame_gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
-
-    # calculate optical flow
-    p1, st, err = cv.calcOpticalFlowPyrLK(
-        old_gray, frame_gray, p0, None, **lk_params)
-
-    # Select good points
-    if p1 is not None:
-        good_new = p1[st == 1]
-        good_old = p0[st == 1]
-
-    # draw the tracks
-    for i, (new, old) in enumerate(zip(good_new, good_old)):
-        a, b = new.ravel()
-        c, d = old.ravel()
-        mask = cv.line(mask, (int(a), int(b)),
-                       (int(c), int(d)), color[i].tolist(), 2)
-        frame = cv.circle(frame, (int(a), int(b)), 5, color[i].tolist(), -1)
-    img = cv.add(frame, mask)
-    writer.write(mask)
-    cv.imshow('DVD', img)
-    k = cv.waitKey(30) & 0xff
-    if k == 27:
-        break
-
-    # Now update the previous frame and previous points
-    old_gray = frame_gray.copy()
-    p0 = good_new.reshape(-1, 1, 2)
-cap.release()
-writer.release()
-cv.destroyAllWindows()
 
 
 class PointTracker(object):
     capture: cv.VideoCapture
     writer: cv.VideoWriter
+    feature_params: Dict[str, Union[float, int]] = FEATURE_PARAMS
+    color = np.random.randint(0, 255, (100, 3))
+    lk_params: Dict[str,Union[int, Tuple[int, int],
+                              Tuple[int, int, float]]] = LK_PARAMS
 
-    def __init__(self, vid_path: Union[str,int] = 0) -> Self:
+    def __init__(self, vid_path: Union[str, int] = 0,
+                 feature_params: Dict[str, Union[float, int]] = FEATURE_PARAMS,
+                 lk_params: Dict[str,Union[int, Tuple[int, int],
+                                           Tuple[int, int, float]]] = LK_PARAMS) -> Self:
         fourcc = cv.VideoWriter_fourcc(*'h264')
         self.capture = cv.VideoCapture(vid_path)
-        fps = cap.get(cv.CAP_PROP_FPS)
-        width = cap.get(cv.CAP_PROP_FRAME_WIDTH)
-        height = cap.get(cv.CAP_PROP_FRAME_HEIGHT)
-        if isinstance(vid_path,int):
-            vid_path = 'webcam'
+        fps = self.capture.get(cv.CAP_PROP_FPS)
+        width = self.capture.get(cv.CAP_PROP_FRAME_WIDTH)
+        height = self.capture.get(cv.CAP_PROP_FRAME_HEIGHT)
+        if isinstance(vid_path, int):
+            vid_path = 'tracked_webcam.mp4'
+        else:
+            file_path = vid_path.split('/')
+            filename = file_path[len(file_path)-1].split('.')[0]
+            vid_path = '/'.join(file_path[:len(file_path) - 1]) + '/tracked_' + filename + '.mp4'
+
         self.writer = cv.VideoWriter(
-            'tracked_' + vid_path,
+            vid_path,
             fourcc,
             fps,
             (int(width), int(height))
@@ -102,6 +48,50 @@ class PointTracker(object):
             raise FileNotFoundError('Video File Not Found')
         elif not self.writer.isOpened():
             raise ValueError('Unable to open video writer')
+        self.feature_params = feature_params
+        self.lk_params = lk_params
+
     def __delete__(self):
         self.capture.release()
-        self.writer.release
+        self.writer.release()
+
+    def track(self, no_points: int = 0, overlay_original: bool = True) -> bool:
+        flag, old_frame = self.capture.read()
+        if not flag:
+            raise RuntimeError('Unable to read file')
+        color = np.random.randint(0, 255, (100, 3))
+        mask = np.zeros_like(old_frame)
+        old_gray = cv.cvtColor(old_frame, cv.COLOR_BGR2GRAY)
+        old_points = cv.goodFeaturesToTrack(
+            old_gray, mask=None, **self.feature_params)
+        if no_points > 0:
+            old_points = old_points[:no_points]
+        cv.imshow('Frame',old_frame)
+        while (flag):
+            flag, new_frame = self.capture.read()
+            if not flag:
+                break
+            new_gray = cv.cvtColor(new_frame, cv.COLOR_BGR2GRAY)
+            new_points, status, error = cv.calcOpticalFlowPyrLK(
+                old_gray, new_gray, old_points, None, **self.lk_params
+            )
+            if new_points is not None:
+                good_old = old_points[status == 1]
+                good_new = new_points[status == 1]
+            for i, (new, old) in enumerate(zip(good_old, good_new)):
+                a, b, = new.ravel()
+                c, d = old.ravel()
+                mask = cv.line(mask, (int(a), int(b)),
+                               (int(c), int(d)), color[i].tolist(), 2)
+            old_gray = new_gray.copy()
+            old_points = good_new.reshape(-1, 1, 2)
+            img = cv.add(mask, new_frame)
+            self.writer.write(img)
+            cv.imshow('Frame',img)
+        return True
+
+
+if __name__ == "__main__":
+    point_tracker = PointTracker('movies/dvd.mov')
+    point_tracker.track()
+    cv.destroyAllWindows()
